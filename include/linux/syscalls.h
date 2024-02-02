@@ -1385,4 +1385,22 @@ int __sys_getsockopt(int fd, int level, int optname, char __user *optval,
 		int __user *optlen);
 int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
 		int optlen);
+
+asmlinkage long sys_rpcool_create_channel(const char __user * dev_prefix, const char __user * path, size_t shared_heap_size);
+asmlinkage long sys_rpcool_setup_connection(const char __user * path, long
+                connection_id, size_t metadata_size, size_t private_heap_size);
+asmlinkage long sys_rpcool_attach_connection(const char __user * path, long
+                connection_id, int target_pid, unsigned long
+                connection_metadata_vma, unsigned long private_heap_vma,
+                unsigned long shared_heap_vma);
+				
+asmlinkage long sys_rpcool_detach_address(int target_pid, long vma_addr, size_t mapping_size);
+asmlinkage long sys_rpcool_delete_connection(const char __user * path, long connection_id);
+asmlinkage long sys_rpcool_delete_channel(const char __user * path);
+                
+asmlinkage long sys_describe_open_channel(void);
+asmlinkage long sys_rpcool_seal(const char __user * path, long connection_id,
+								unsigned long start, size_t len);
+asmlinkage long sys_rpcool_release(const char __user * path, long connection_id, int index, const unsigned char __user * signiture);
+
 #endif

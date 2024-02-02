@@ -373,6 +373,17 @@
 449	common	futex_waitv		sys_futex_waitv
 450	common	set_mempolicy_home_node	sys_set_mempolicy_home_node
 
+451	common	rpcool_create_channel	    sys_rpcool_create_channel
+452	common	rpcool_setup_connection	    sys_rpcool_setup_connection
+453	common	rpcool_attach_connection	sys_rpcool_attach_connection
+454	common	rpcool_detach_address       sys_rpcool_detach_address
+455	common	rpcool_delete_connection    sys_rpcool_delete_connection
+456	common	rpcool_delete_channel       sys_rpcool_delete_channel
+
+457	common	rpcool_seal		            sys_rpcool_seal
+458	common	rpcool_release		        sys_rpcool_release
+459	common	rpcool_describe_channel	    sys_rpcool_describe_channel
+
 #
 # Due to a historical design error, certain syscalls are numbered differently
 # in x32 as compared to native x86_64.  These syscalls have numbers 512-547.

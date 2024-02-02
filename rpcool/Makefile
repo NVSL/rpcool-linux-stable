@@ -1,0 +1,1 @@
+obj-y := rpcool.o helpers.o mmap.o seal_queue.o crypto.o
