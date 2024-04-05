@@ -45,8 +45,8 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
         .len = len,
     };
 
-    pr_info("[rpcool] enqueueing a seal at addr = %lu, len = %lu\n", addr, len);
-    pr_info("[rpcool] aquiring the lock\n");
+    // pr_info("[rpcool] enqueueing a seal at addr = %lu, len = %lu\n", addr, len);
+    // pr_info("[rpcool] aquiring the lock\n");
     
     mutex_lock(&seal_store->lock);
     next_free_element = get_next_free_element(seal_store);
@@ -56,7 +56,7 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
         pr_err("[rpcool] seal store is full\n");
         return -ENOMEM;
     }
-    pr_info("[rpcool] next free element is at @ %d\n", next_free_element);
+    // pr_info("[rpcool] next free element is at @ %d\n", next_free_element);
 
     entry.nonce = get_current_nonce(seal_store, next_free_element); // read & incremnt nonce in memory
     entry.nonce++;
@@ -133,22 +133,11 @@ struct SealEntry * get_seal(struct SealStore* seal_store, ssize_t index) {
 int release_seal(struct SealStore* seal_store, ssize_t index) {
     loff_t pos;
     ssize_t result;
-    struct SealEntry *entry;
+    static struct SealEntry entry = {0};
 
-    pr_info("[rpcool] releasing seal at index = %zd\n", index);
-
-    entry = get_seal(seal_store, index);
-    if (IS_ERR(entry)) {
-        pr_err("[rpcool] release: Error getting seal entry at index = %zd\n", index);
-        return PTR_ERR(entry);
-    }
-    //possibly perform crypto HMAC check here
-
-    entry->addr = 0;
-    entry->len = 0;
-
+    // pr_info("[rpcool] releasing seal at index = %zd\n", index);
     pos = ENTRIES_START_POS + index * sizeof(struct SealEntry);
-    result = kernel_write(seal_store->f_metadata, entry, sizeof(struct SealEntry), &pos);
+    result = kernel_write(seal_store->f_metadata, &entry, sizeof(struct SealEntry), &pos);
     if (result < 0) {
         pr_err("[rpcool] release: Error zeroing out the entry in the seal store: %zd\n", result);
         return result;
@@ -161,7 +150,6 @@ int release_seal(struct SealStore* seal_store, ssize_t index) {
         }
     mutex_unlock(&seal_store->lock);
 
-    kfree(entry);
     return 0;
 }
 

@@ -2,6 +2,7 @@
 #include "seal_queue.h"
 
 #include <linux/fs.h>
+#include <linux/ktime.h>
 
 static size_t g_alloc_size;
 static unsigned long g_user_addr;
@@ -12,6 +13,8 @@ static unsigned long prot = PROT_READ | PROT_WRITE;
 
 DECLARE_HASHTABLE(g_shared_heaps, SHARED_HEAP_TABLE_BITS);
 DECLARE_HASHTABLE(g_connections, CONNECTION_TABLE_BITS);
+
+static int DEBUG_RPCOOL = 0;
 
 // ###############################
 // ###### Helper Functions #######
@@ -122,9 +125,9 @@ int rpcool_change_protection(unsigned long start, size_t len, unsigned long prot
 	reqprot = prot;
 
 	if (prot == PROT_READ) {
-		printk("[rpcool] change_protection called. prot = PROT_READ.\n");
+		// printk("[rpcool] change_protection called. prot = PROT_READ.\n");
 	} else if (prot == (PROT_READ | PROT_WRITE)) {
-		printk("[rpcool] change_protection called. prot = PROT_WRITE.\n");
+		// printk("[rpcool] change_protection called. prot = PROT_WRITE.\n");
 	} else {
 		printk("[rpcool] change_protection called. prot = invalid prot\n");
 		return -EINVAL;
@@ -143,7 +146,7 @@ int rpcool_change_protection(unsigned long start, size_t len, unsigned long prot
 	len = PAGE_ALIGN(len);
 	end = start + len;
 
-	printk("[rpcool] aligned start: %lx, end: %lx, len: %lx\n", start, end, len);
+	// printk("[rpcool] aligned start: %lx, end: %lx, len: %lx\n", start, end, len);
 
 	if (!arch_validate_prot(prot, start)) {
 		printk("[rpcool] invalid prot (arch validation)\n");
@@ -228,8 +231,8 @@ flags\n"); error = -EACCES; break;
 		if (nstart < prev->vm_end)
 			nstart = prev->vm_end;
 		if (nstart >= end) {
-			printk("[rpcool] nstart is greater than or equal to end: probably end of "
-			       "vma iterations\n");
+			// printk("[rpcool] nstart is greater than or equal to end: probably end of "
+			//        "vma iterations\n");
 			break;
 		}
 
@@ -249,7 +252,7 @@ flags\n"); error = -EACCES; break;
 	}
 
 out:
-	printk(KERN_INFO "[rpcool] change mem protection finished. return code: %d\n", error);
+	// printk(KERN_INFO "[rpcool] change mem protection finished. return code: %d\n", error);
 	mmap_write_unlock(current->mm);
 	return error;
 }
@@ -466,12 +469,14 @@ SYSCALL_DEFINE4(rpcool_seal, const char __user *, path, long, connection_id, uns
 	struct connection_entry *connection_entry;
 	int error, result;
 
-	printk("[rpcool] rpcool_seal called.");
+	// printk("[rpcool] rpcool_seal called.");
 
-	shared_heap_path = concat_paths_user(path, ""); // need to convert path to kernelspace value
-	printk("[rpcool] rpcool_seal called with path=%s and connection_id=%ld, start=%lx and len=%zu\n",
-	       shared_heap_path, connection_id, start, len);
-	kfree(shared_heap_path);
+	if (DEBUG_RPCOOL) {
+		shared_heap_path = concat_paths_user(path, ""); // need to convert path to kernelspace value
+		printk("[rpcool] rpcool_seal called with path=%s and connection_id=%ld, start=%lx and len=%zu\n",
+			shared_heap_path, connection_id, start, len);
+		kfree(shared_heap_path);
+	}
 
 	connection_entry = find_connection_entry(path, connection_id);
 	if (connection_entry == NULL) {
@@ -511,13 +516,14 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	uint64_t nonce;
 
 
-	printk("[rpcool] rpcool_release called with index=%d\n", index);
+	// printk("[rpcool] rpcool_release called with index=%d\n", index);
 
-	shared_heap_path = concat_paths_user(path, ""); // need to convert path to kernelspace value
-	printk("[rpcool] rpcool_release called with path=%s and connection_id=%ld, index=%d\n",
-	       shared_heap_path, connection_id, index);
-	kfree(shared_heap_path);
-
+	if (DEBUG_RPCOOL) {
+		shared_heap_path = concat_paths_user(path, ""); // need to convert path to kernelspace value
+		printk("[rpcool] rpcool_release called with path=%s and connection_id=%ld, index=%d\n",
+			shared_heap_path, connection_id, index);
+		kfree(shared_heap_path);
+	}
 
 	connection_entry = find_connection_entry(path, connection_id);
 	if (connection_entry == NULL) {
@@ -525,7 +531,6 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	}
 
 	seal_entry = get_seal(connection_entry->seal_store, index);
-	//check for errors IS_ERR(seal_entry)
 	if (IS_ERR(seal_entry)) {
 		printk("[rpcool] release: could not read (get) seal entry\n");
 		return -1;
@@ -534,11 +539,10 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	start = seal_entry->addr;
 	len = seal_entry->len;
 	nonce = seal_entry->nonce;
-	kfree(seal_entry);
-	
 
 	result = validate_signature(signature, HMAC_KEY, strlen(HMAC_KEY), index, nonce);
     if (result != 0) {
+		kfree(seal_entry);
         return result;
     }
 
@@ -546,16 +550,18 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	if (error != 0) {
 		pr_err("[rpcool] release: could not change protection for addr=%lu, len=%lu", start,
 		       len);
+		kfree(seal_entry);
 		return error;
 	}
 
-	printk("[rpcool] release: remmapped the memory region at index=%d\n", index);
+	// printk("[rpcool] release: remmapped the memory region at index=%d\n", index);
 
 	result = release_seal(connection_entry->seal_store, index);
 	if (result < 0) {
 		printk("[rpcool] release: could not update the seal_store. But remapped the memory region at index=%d\n", index);
 		return result;
 	}
+	// kfree(seal_entry);
 
 	return result;
 }

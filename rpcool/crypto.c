@@ -124,7 +124,7 @@ unsigned char * calc_hash_now(unsigned char *key, size_t key_size, uint64_t inde
         return NULL;
     }
 
-    pr_info("Hash calculated successfully\n");
+    // pr_info("Hash calculated successfully\n");
     return digest;
 }
 
@@ -152,8 +152,8 @@ int validate_signature(const unsigned char __user *user_signature, const unsigne
         printk("[rpcool] validate_signature: could not copy signature from userspace\n");
         return -EFAULT;
     }
-    printk("[rpcool] validate_signature: user provided signature is: \n");
-    print_hash(signature_buffer);
+    // printk("[rpcool] validate_signature: user provided signature is: \n");
+    // print_hash(signature_buffer);
 
     digest = calc_hash_now(key, key_size, index, nonce);
     if (digest == NULL) {
@@ -161,9 +161,9 @@ int validate_signature(const unsigned char __user *user_signature, const unsigne
         return -EINVAL;
     }
 
-    printk("[rpcool] validate_signature: calculating signiture for index = %llu, nonce = %llu\n", index, nonce);
-    printk("[rpcool] validate_signature: calculated signature (digest) is: \n");
-    print_hash(digest);
+    // printk("[rpcool] validate_signature: calculating signiture for index = %llu, nonce = %llu\n", index, nonce);
+    // printk("[rpcool] validate_signature: calculated signature (digest) is: \n");
+    // print_hash(digest);
 
     if (!compare_signatures(digest, signature_buffer)) {
         printk("[rpcool] validate_signature: signatures do not match\n");
@@ -171,7 +171,7 @@ int validate_signature(const unsigned char __user *user_signature, const unsigne
         return -EACCES;
     }
 
-    printk("[rpcool] validate_signature: signatures is valid\n");
+    // printk("[rpcool] validate_signature: signatures is valid\n");
     kfree(digest);
     return 0;
 }
