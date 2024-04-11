@@ -43,6 +43,7 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
     struct SealEntry entry = {
         .addr = addr,
         .len = len,
+        .nonce = 0
     };
 
     // pr_info("[rpcool] enqueueing a seal at addr = %lu, len = %lu\n", addr, len);
@@ -58,8 +59,8 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
     }
     // pr_info("[rpcool] next free element is at @ %d\n", next_free_element);
 
-    entry.nonce = get_current_nonce(seal_store, next_free_element); // read & incremnt nonce in memory
-    entry.nonce++;
+    // entry.nonce = get_current_nonce(seal_store, next_free_element); // read & incremnt nonce in memory
+    // entry.nonce++;
 
     pos = ENTRIES_START_POS + next_free_element * sizeof(struct SealEntry);
     result = kernel_write(seal_store->f_metadata, &entry, sizeof(struct SealEntry), &pos); // also stores the new nonce

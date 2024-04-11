@@ -540,9 +540,12 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	len = seal_entry->len;
 	nonce = seal_entry->nonce;
 
-	result = validate_signature(signature, HMAC_KEY, strlen(HMAC_KEY), index, nonce);
-    if (result != 0) {
+	// result = validate_signature(signature, HMAC_KEY, strlen(HMAC_KEY), index, nonce);
+	// if (result != 0) {
+	
+    if (nonce == 0) { // repurposing nonce to be `is_receiver_done`
 		kfree(seal_entry);
+		printk("[rpcool] release: could not release index=%d, nonce is 0\n", index);
         return result;
     }
 
