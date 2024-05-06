@@ -1,5 +1,6 @@
 #include "rpcool.h"
 #include "seal_queue.h"
+#include "stats.h"
 
 #include <linux/fs.h>
 #include <linux/ktime.h>
@@ -10,6 +11,9 @@ static unsigned long g_user_addr;
 static unsigned long vm_flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_SHARED | VM_MAYSHARE;
 static unsigned long map_flags = MAP_SHARED | MAP_FIXED;
 static unsigned long prot = PROT_READ | PROT_WRITE;
+
+static syscall_time_stats_t seal_syscall_stats;
+static syscall_time_stats_t release_syscall_stats;
 
 DECLARE_HASHTABLE(g_shared_heaps, SHARED_HEAP_TABLE_BITS);
 DECLARE_HASHTABLE(g_connections, CONNECTION_TABLE_BITS);
@@ -469,8 +473,10 @@ SYSCALL_DEFINE4(rpcool_seal, const char __user *, path, long, connection_id, uns
 	struct connection_entry *connection_entry;
 	int error, result;
 
-	// printk("[rpcool] rpcool_seal called.");
-
+	ktime_t start_time;
+	static syscall_time_stats_t syscall_stats = {"rpcool_seal", 0, 0};
+	start_time = start_time_measure();
+	
 	if (DEBUG_RPCOOL) {
 		shared_heap_path = concat_paths_user(path, ""); // need to convert path to kernelspace value
 		printk("[rpcool] rpcool_seal called with path=%s and connection_id=%ld, start=%lx and len=%zu\n",
@@ -502,6 +508,7 @@ SYSCALL_DEFINE4(rpcool_seal, const char __user *, path, long, connection_id, uns
 		return result;
 	}
 
+	end_time_measure(start_time, &syscall_stats, 1000);
 	return result;
 }
 
@@ -514,6 +521,9 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 	int error, result;
 	size_t start, len;
 	uint64_t nonce;
+	ktime_t start_time;
+	static syscall_time_stats_t syscall_stats = {"rpcool_release", 0, 0};
+	start_time = start_time_measure();
 
 
 	// printk("[rpcool] rpcool_release called with index=%d\n", index);
@@ -565,7 +575,7 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id, 
 		return result;
 	}
 	// kfree(seal_entry);
-
+	end_time_measure(start_time, &syscall_stats, 1000);
 	return result;
 }
 
