@@ -3,6 +3,7 @@
 
 #include "seal_queue.h"
 
+
 #include <asm/io.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
@@ -66,6 +67,8 @@ struct shared_heap_entry {
   char *dev_prefix_path;
   char *path;
   struct file *shared_heap;
+  unsigned long vma;
+  unsigned long size;
   struct hlist_node hnode;
 };
 
@@ -81,5 +84,8 @@ struct connection_entry {
 #define CONNECTION_TABLE_BITS 10     // A table of 2^10 entries
 
 #define HMAC_KEY "8NQEL3eZmLj7IgYwkeKnzLtE+qzwEJu9"
+
+#define SEAL_STANDARD 0
+#define SEAL_BATCH_RELEASE 1
 
 #endif  //_RPCOOL_KERNEL_H

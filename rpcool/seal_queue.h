@@ -4,9 +4,9 @@
 #include <linux/kfifo.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 
-#define MAX_QUEUE_LEN 1024  // Adjust according to your maximum queue length
-
+#define MAX_QUEUE_LEN 16384  // Adjust according to your maximum queue length
 
 struct SealEntry
 {
@@ -21,7 +21,10 @@ struct SealStore
 {
     DECLARE_KFIFO(free_list, int, MAX_QUEUE_LEN);
     struct mutex lock;
+    struct mutex seal_only_one_should_call_release_lock;
     struct file *f_metadata;
+    atomic_t seal_counter;
+
 };
 
 // struct SealFreeList; update store_seal return type comment
@@ -29,10 +32,15 @@ struct SealStore
 //return index of the seal entry or error (negative value) otherwise
 //return type == SealStore.kfifo item type
 int store_seal(struct SealStore* seal_store, size_t addr, size_t len);
+int store_seal_at_index(struct SealStore* seal_store, size_t addr, size_t len, int index);
 // caller has to free the returned pointer
 struct SealEntry * get_seal(struct SealStore* seal_store, ssize_t index);
 uint64_t get_current_nonce(struct SealStore* seal_store, ssize_t index);
 int release_seal(struct SealStore* seal_store, ssize_t index);
 struct SealStore * initialize_seal_store(struct file *f_metadata);
+//returns value of release counter. 0 otherwise
+uint64_t read_release_counter(struct SealStore* seal_store);
+//returns 0 on success and -1 on failure
+int reset_release_counter(struct SealStore* seal_store);
 
 #endif

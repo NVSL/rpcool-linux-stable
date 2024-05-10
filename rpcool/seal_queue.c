@@ -3,7 +3,8 @@
 #include <linux/err.h>
 
 #define KEY_POS 0
-#define Q_SIZE_POS 48
+#define RELEASE_COUNTER_POS 48
+#define Q_SIZE_POS RELEASE_COUNTER_POS + 8
 #define ENTRIES_START_POS Q_SIZE_POS + 8
 
 #define HMAC_KEY2 "8NQEL3eZmLj7IgYwkeKnzLtE+qzwEJu9"
@@ -29,14 +30,14 @@ uint64_t get_current_nonce(struct SealStore* seal_store, ssize_t index) {
     result = kernel_read(seal_store->f_metadata, &nonce, sizeof(nonce), &pos);
     if (result < 0) {
         pr_err("[rpcool] Error reading nonce from queue: %zd\n", result);
-        return ERR_PTR(result);
+        return UINT_MAX; // this is bad and buggy!
     }
 
     return nonce;
 }
 
 
-int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
+int store_seal_at_index(struct SealStore* seal_store, size_t addr, size_t len, int index) {
     loff_t pos;
     ssize_t result;
     int next_free_element;
@@ -49,6 +50,10 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
     // pr_info("[rpcool] enqueueing a seal at addr = %lu, len = %lu\n", addr, len);
     // pr_info("[rpcool] aquiring the lock\n");
     
+
+    next_free_element = index;
+    /* //batch seal / release
+    
     mutex_lock(&seal_store->lock);
     next_free_element = get_next_free_element(seal_store);
     mutex_unlock(&seal_store->lock);
@@ -57,6 +62,7 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
         pr_err("[rpcool] seal store is full\n");
         return -ENOMEM;
     }
+    */
     // pr_info("[rpcool] next free element is at @ %d\n", next_free_element);
 
     // entry.nonce = get_current_nonce(seal_store, next_free_element); // read & incremnt nonce in memory
@@ -71,6 +77,19 @@ int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
 
     
     return next_free_element;
+}
+
+int store_seal(struct SealStore* seal_store, size_t addr, size_t len) {
+    mutex_lock(&seal_store->lock);
+    int next_free_element = get_next_free_element(seal_store);
+    mutex_unlock(&seal_store->lock);
+    
+    if (next_free_element == -1) {
+        pr_err("[rpcool] seal store is full\n");
+        return -ENOMEM;
+    }
+    
+    return store_seal_at_index(seal_store, addr, len, next_free_element);
 }
 
 struct SealStore * initialize_seal_store(struct file *f_metadata) {
@@ -89,8 +108,10 @@ struct SealStore * initialize_seal_store(struct file *f_metadata) {
     }
 
     seal_store->f_metadata = f_metadata;
+    atomic_set(&seal_store->seal_counter, 0);
     INIT_KFIFO(seal_store->free_list);
     mutex_init(&seal_store->lock);
+    mutex_init(&seal_store->seal_only_one_should_call_release_lock);
 
     // write size to file
     pos = Q_SIZE_POS;
@@ -108,6 +129,14 @@ struct SealStore * initialize_seal_store(struct file *f_metadata) {
             return ERR_PTR(-ENOMEM);
         }
     }
+
+    if (reset_release_counter(seal_store) != 0) {
+        kfree(seal_store);
+        pr_err("[rpcool] Error resetting release counter to zero\n");
+        return ERR_PTR(-1);
+    }
+
+
 
     return seal_store;
 }
@@ -130,6 +159,27 @@ struct SealEntry * get_seal(struct SealStore* seal_store, ssize_t index) {
     return entry;
 }
 
+ uint64_t read_release_counter(struct SealStore* seal_store) {
+    loff_t pos = RELEASE_COUNTER_POS;
+    uint64_t release_counter = 0;
+    ssize_t result = kernel_read(seal_store->f_metadata, &release_counter, sizeof(uint64_t), &pos);
+    if (result < 0) {
+        pr_err("[rpcool] Error reading release counter: %zd\n", result);
+        return 0;
+    }
+    return release_counter;
+}
+
+ int reset_release_counter(struct SealStore* seal_store) {
+    loff_t pos = RELEASE_COUNTER_POS;
+    uint64_t release_counter = 0;
+    ssize_t result = kernel_write(seal_store->f_metadata, &release_counter, sizeof(uint64_t), &pos);
+    if (result < 0) {
+        pr_err("[rpcool] Error resetting release counter to zero: %zd\n", result);
+        return -1;
+    }
+    return 0;
+}
 
 int release_seal(struct SealStore* seal_store, ssize_t index) {
     loff_t pos;
