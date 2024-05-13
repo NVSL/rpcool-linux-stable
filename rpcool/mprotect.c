@@ -90,11 +90,11 @@ flags\n"); error = -EACCES; break;
 		}
 
 		// TODO do we need this? what does it do?
-		error = security_file_mprotect(vma, reqprot, prot);
-		if (error) {
-			printk("[rpcool] security_file_mprotect failed\n");
-			break;
-		}
+		// error = security_file_mprotect(vma, reqprot, prot);
+		// if (error) {
+		// 	printk("[rpcool] security_file_mprotect failed\n");
+		// 	break;
+		// }
 
 		tmp = vma->vm_end;
 		if (tmp > end)
