@@ -464,7 +464,7 @@ SYSCALL_DEFINE6(rpcool_seal, const char __user *, path, long, connection_id,
 			if (error != 0)
 				return error;
 			index = 0; // batch_release will reset the counter to 1 and hence 0 will be ours to use
-			start_time = start_time_measure(); // reset the start_timer for seal so that we will not include the release time in the seal time
+			//start_time = start_time_measure(); // reset the start_timer for seal so that we will not include the release time in the seal time
 		} // continue with the seal
 	}
 
