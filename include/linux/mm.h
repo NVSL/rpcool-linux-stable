@@ -2042,6 +2042,10 @@ extern int mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			  struct vm_area_struct **pprev, unsigned long start,
 			  unsigned long end, unsigned long newflags);
 
+extern int rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
+			  struct vm_area_struct **pprev, unsigned long start,
+			  unsigned long end, unsigned long newflags);
+
 /*
  * doesn't attempt to fault and will return short.
  */

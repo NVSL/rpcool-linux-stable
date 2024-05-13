@@ -1,4 +1,5 @@
 #include "mprotect.h"
+#include <linux/mm.h>
 
 int rpcool_change_protection(unsigned long start, size_t len,
 			     unsigned long prot)
@@ -112,7 +113,7 @@ flags\n"); error = -EACCES; break;
 			}
 		}
 
-		error = mprotect_fixup(&tlb, vma, &prev, nstart, tmp, newflags);
+		error = rpcool_mprotect_fixup(&tlb, vma, &prev, nstart, tmp, newflags);
 		if (error) {
 			printk("[rpcool] mprotect_fixup failed\n");
 			break;

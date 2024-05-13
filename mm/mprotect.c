@@ -665,6 +665,127 @@ fail:
 	return error;
 }
 
+int
+rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
+	       struct vm_area_struct **pprev, unsigned long start,
+	       unsigned long end, unsigned long newflags)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long oldflags = vma->vm_flags;
+	long nrpages = (end - start) >> PAGE_SHIFT;
+	unsigned long charged = 0;
+	bool try_change_writable;
+	pgoff_t pgoff;
+	int error;
+
+	if (newflags == oldflags) {
+		*pprev = vma;
+		return 0;
+	}
+
+	/*
+	 * Do PROT_NONE PFN permission checks here when we can still
+	 * bail out without undoing a lot of state. This is a rather
+	 * uncommon case, so doesn't need to be very optimized.
+	 */
+	if (arch_has_pfn_modify_check() &&
+	    (vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)) &&
+	    (newflags & VM_ACCESS_FLAGS) == 0) {
+		pgprot_t new_pgprot = vm_get_page_prot(newflags);
+
+		error = walk_page_range(current->mm, start, end,
+				&prot_none_walk_ops, &new_pgprot);
+		if (error)
+			return error;
+	}
+
+	/*
+	 * If we make a private mapping writable we increase our commit;
+	 * but (without finer accounting) cannot reduce our commit if we
+	 * make it unwritable again. hugetlb mapping were accounted for
+	 * even if read-only so there is no need to account for them here
+	 */
+	if (newflags & VM_WRITE) {
+		/* Check space limits when area turns into data. */
+		if (!may_expand_vm(mm, newflags, nrpages) &&
+				may_expand_vm(mm, oldflags, nrpages))
+			return -ENOMEM;
+		if (!(oldflags & (VM_ACCOUNT|VM_WRITE|VM_HUGETLB|
+						VM_SHARED|VM_NORESERVE))) {
+			charged = nrpages;
+			if (security_vm_enough_memory_mm(mm, charged))
+				return -ENOMEM;
+			newflags |= VM_ACCOUNT;
+		}
+	}
+
+	/*
+	 * First try to merge with previous and/or next vma.
+	 */
+	/*pgoff = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
+	*pprev = vma_merge(mm, *pprev, start, end, newflags,
+			   vma->anon_vma, vma->vm_file, pgoff, vma_policy(vma),
+			   vma->vm_userfaultfd_ctx, anon_vma_name(vma));
+	if (*pprev) {
+		vma = *pprev;
+		VM_WARN_ON((vma->vm_flags ^ newflags) & ~VM_SOFTDIRTY);
+		goto success;
+	}*/
+
+	*pprev = vma;
+
+	if (start != vma->vm_start) {
+		error = split_vma(mm, vma, start, 1);
+		if (error)
+			goto fail;
+	}
+
+	if (end != vma->vm_end) {
+		error = split_vma(mm, vma, end, 0);
+		if (error)
+			goto fail;
+	}
+
+success:
+	/*
+	 * vm_flags and vm_page_prot are protected by the mmap_lock
+	 * held in write mode.
+	 */
+	vma->vm_flags = newflags;
+	/*
+	 * We want to check manually if we can change individual PTEs writable
+	 * if we can't do that automatically for all PTEs in a mapping. For
+	 * private mappings, that's always the case when we have write
+	 * permissions as we properly have to handle COW.
+	 */
+	if (vma->vm_flags & VM_SHARED)
+		try_change_writable = vma_wants_writenotify(vma, vma->vm_page_prot);
+	else
+		try_change_writable = !!(vma->vm_flags & VM_WRITE);
+	vma_set_page_prot(vma);
+
+	change_protection(tlb, vma, start, end, vma->vm_page_prot,
+			  try_change_writable ? MM_CP_TRY_CHANGE_WRITABLE : 0);
+
+	/*
+	 * Private VM_LOCKED VMA becoming writable: trigger COW to avoid major
+	 * fault on access.
+	 */
+	if ((oldflags & (VM_WRITE | VM_SHARED | VM_LOCKED)) == VM_LOCKED &&
+			(newflags & VM_WRITE)) {
+		populate_vma_page_range(vma, start, end, NULL);
+	}
+
+	vm_stat_account(mm, oldflags, -nrpages);
+	vm_stat_account(mm, newflags, nrpages);
+	perf_event_mmap(vma);
+	return 0;
+
+fail:
+	vm_unacct_memory(charged);
+	return error;
+}
+
 /*
  * pkey==-1 when doing a legacy mprotect()
  */
