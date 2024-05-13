@@ -388,8 +388,7 @@ SYSCALL_DEFINE0(rpcool_describe_channel)
  * @note This will reset seal_counter to 1 (and not 0) because the caller will continue to seal after this release
 */
 
-int batch_release(struct connection_entry *connection_entry,
-		  const char __user *path, unsigned long release_threshold)
+int batch_release(struct connection_entry *connection_entry, unsigned long release_threshold)
 {
 	int error;
 	struct shared_heap_entry *shared_heap_entry;
@@ -455,11 +454,10 @@ int batch_release(struct connection_entry *connection_entry,
 	return 0;
 }
 
-SYSCALL_DEFINE6(rpcool_seal, const char __user *, path, long, connection_id,
+SYSCALL_DEFINE5(rpcool_seal, int, connection_fd,
 		unsigned long, start, size_t, len, int, mode, unsigned long,
 		release_threshold)
 {
-	const char *shared_heap_path;
 	struct connection_entry *connection_entry;
 	struct shared_heap_entry *shared_heap_entry;
 	int error, result;
@@ -469,14 +467,13 @@ SYSCALL_DEFINE6(rpcool_seal, const char __user *, path, long, connection_id,
 	start_time = start_time_measure();
 
 	if (DEBUG_RPCOOL) {
-		shared_heap_path = concat_paths_user(
-			path, ""); // need to convert path to kernelspace value
-		printk("[rpcool] rpcool_seal called with path=%s and connection_id=%ld, start=%lx and len=%zu\n",
-		       shared_heap_path, connection_id, start, len);
-		kfree(shared_heap_path);
+		printk("[rpcool] rpcool_seal called with connection fd=%d, start=%lx and len=%zu\n", connection_fd, start, len);
 	}
-
-	connection_entry = find_connection_entry(path, connection_id);
+	if (connection_fd < 0) {
+		printk("[rpcool] seal: invalid connection_fd\n");
+		return -1;
+	}
+	connection_entry = g_connections_fd[connection_fd];
 	if (connection_entry == NULL) {
 		return -1;
 	}
@@ -485,7 +482,7 @@ SYSCALL_DEFINE6(rpcool_seal, const char __user *, path, long, connection_id,
 		index = arch_atomic_fetch_inc(
 			&connection_entry->seal_store->seal_counter);
 		if (index >= release_threshold) {
-			error = batch_release(connection_entry, path,
+			error = batch_release(connection_entry,
 					      release_threshold);
 			if (error != 0)
 				return error;
@@ -527,10 +524,9 @@ SYSCALL_DEFINE6(rpcool_seal, const char __user *, path, long, connection_id,
 	return result;
 }
 
-SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id,
+SYSCALL_DEFINE3(rpcool_release, int, connection_fd,
 		int, index, const unsigned char __user *, signature)
 {
-	const char *shared_heap_path;
 	struct connection_entry *connection_entry;
 	struct SealEntry *seal_entry;
 	int error, result;
@@ -545,14 +541,14 @@ SYSCALL_DEFINE4(rpcool_release, const char __user *, path, long, connection_id,
 	// printk("[rpcool] rpcool_release called with index=%d\n", index);
 
 	if (DEBUG_RPCOOL) {
-		shared_heap_path = concat_paths_user(
-			path, ""); // need to convert path to kernelspace value
-		printk("[rpcool] rpcool_release called with path=%s and connection_id=%ld, index=%d\n",
-		       shared_heap_path, connection_id, index);
-		kfree(shared_heap_path);
+		printk("[rpcool] rpcool_release called with connection_fd=%d, index=%d\n", connection_fd, index);
 	}
 
-	connection_entry = find_connection_entry(path, connection_id);
+	if (connection_fd < 0) {
+		printk("[rpcool] seal: invalid connection_fd\n");
+		return -1;
+	}
+	connection_entry = g_connections_fd[connection_fd];
 	if (connection_entry == NULL) {
 		return -1;
 	}
