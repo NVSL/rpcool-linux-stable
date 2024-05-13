@@ -249,6 +249,7 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 	new_entry->metadata = f_metadata;
 	new_entry->private_heap = f_private_heap;
 	new_entry->seal_store = initialize_seal_store(f_metadata);
+	new_entry->shared_heap_entry = shared_heap_entry;
 
 	if (IS_ERR(new_entry->seal_store)) {
 		printk("[rpcool] could not initialize seal store\n");
@@ -291,17 +292,17 @@ SYSCALL_DEFINE6(rpcool_attach_connection, const char __user *, path, long,
 		printk("[rpcool] found process for pid %d", target_pid);
 	}
 
-	shared_heap_entry = find_shared_heap_entry(path);
-	if (shared_heap_entry == NULL) {
-		return -1;
-	}
-	shared_heap_entry->vma = shared_heap_vma;
-
 	connection_entry = find_connection_entry(path, connection_id);
 
 	if (connection_entry == NULL) {
 		return -1;
 	}
+
+	shared_heap_entry = connection_entry->shared_heap_entry;
+	if (shared_heap_entry == NULL) {
+		return -1;
+	}
+	shared_heap_entry->vma = shared_heap_vma;
 
 	if (rpcool_map_file(target_process, shared_heap_entry->shared_heap,
 			    read_file_size(shared_heap_entry->shared_heap),
@@ -396,7 +397,7 @@ int batch_release(struct connection_entry *connection_entry,
 	// if (retry_count > 10)
 	// 	pr_info("[rpcool] wait for the release counter took %d retries\n", retry_count);
 	// pr_info("[rpcool] release counter reached release_threshold\n");
-	shared_heap_entry = find_shared_heap_entry(path);
+	shared_heap_entry = connection_entry->shared_heap_entry;
 	if (shared_heap_entry == NULL) {
 		pr_err("[rpcool] could not find shared heap entry in release!\n");
 		mutex_unlock(&connection_entry->seal_store

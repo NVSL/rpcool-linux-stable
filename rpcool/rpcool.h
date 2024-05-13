@@ -77,6 +77,7 @@ struct connection_entry {
   struct file *metadata;
   struct file *private_heap;
   struct SealStore * seal_store;
+  struct shared_heap_entry * shared_heap_entry;
   struct hlist_node hnode;
 };
 
