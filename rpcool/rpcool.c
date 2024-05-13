@@ -4,6 +4,7 @@
 #include "mprotect.h"
 
 #include <linux/atomic.h>
+#include <linux/idr.h>
 #include <linux/fs.h>
 #include <linux/ktime.h>
 #include <linux/sched.h>
@@ -18,6 +19,9 @@ static unsigned long prot = PROT_READ | PROT_WRITE;
 
 DECLARE_HASHTABLE(g_shared_heaps, SHARED_HEAP_TABLE_BITS);
 DECLARE_HASHTABLE(g_connections, CONNECTION_TABLE_BITS);
+
+static struct connection_entry *g_connections_fd[CONNECTION_DESCRIPTOR_LEN];
+static DEFINE_IDA(g_connections_fd_id_allocator);
 
 static int DEBUG_RPCOOL = 0;
 
@@ -197,6 +201,8 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 	struct file *f_metadata;
 	struct file *f_private_heap;
 
+	int fd;
+
 	unsigned int hash_value;
 	struct shared_heap_entry *shared_heap_entry;
 	struct connection_entry *new_entry;
@@ -250,6 +256,7 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 	new_entry->private_heap = f_private_heap;
 	new_entry->seal_store = initialize_seal_store(f_metadata);
 	new_entry->shared_heap_entry = shared_heap_entry;
+	new_entry->connection_id = connection_id;
 
 	if (IS_ERR(new_entry->seal_store)) {
 		printk("[rpcool] could not initialize seal store\n");
@@ -260,11 +267,29 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 		return PTR_ERR(new_entry->seal_store);
 	}
 
+	fd = ida_alloc(&g_connections_fd_id_allocator, GFP_KERNEL);
+	if (fd < 0 || fd >= CONNECTION_DESCRIPTOR_LEN) {
+		printk("[rpcool] could not allocate fd\n");
+		if (fd >= CONNECTION_DESCRIPTOR_LEN)
+			printk("[rpcool] fd is too large\n");
+		fput(f_metadata);	
+		fput(f_private_heap);
+		kfree(new_entry->path);
+		kfree(new_entry->seal_store);
+		kfree(new_entry);
+		return -1;
+	}
+
+	new_entry->connection_fd = fd;
+	g_connections_fd[fd] = new_entry;
+	
 	hash_value =
 		full_name_hash(NULL, new_entry->path, strlen(new_entry->path));
 	hash_add(g_connections, &new_entry->hnode, hash_value);
 
-	return 0;
+	
+
+	return fd;
 }
 
 SYSCALL_DEFINE6(rpcool_attach_connection, const char __user *, path, long,
@@ -611,6 +636,12 @@ SYSCALL_DEFINE2(rpcool_delete_connection, const char __user *, path, long,
 	entry = find_connection_entry(path, connection_id);
 	if (entry == NULL) {
 		return -1;
+	}
+
+	if(entry->connection_fd != -1) {
+		g_connections_fd[entry->connection_fd] = NULL;
+		ida_free(&g_connections_fd_id_allocator, entry->connection_fd);
+		entry->connection_fd = -1;
 	}
 
 	fput(entry->metadata);

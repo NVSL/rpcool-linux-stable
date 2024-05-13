@@ -74,6 +74,8 @@ struct shared_heap_entry {
 
 struct connection_entry {
   char *path;
+  long connection_id;
+  long connection_fd;
   struct file *metadata;
   struct file *private_heap;
   struct SealStore * seal_store;
@@ -88,5 +90,7 @@ struct connection_entry {
 
 #define SEAL_STANDARD 0
 #define SEAL_BATCH_RELEASE 1
+
+#define CONNECTION_DESCRIPTOR_LEN 4096
 
 #endif  //_RPCOOL_KERNEL_H
