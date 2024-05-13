@@ -1399,8 +1399,8 @@ asmlinkage long sys_rpcool_delete_connection(const char __user * path, long conn
 asmlinkage long sys_rpcool_delete_channel(const char __user * path);
                 
 asmlinkage long sys_describe_open_channel(void);
-asmlinkage long sys_rpcool_seal(const char __user * path, long connection_id,
+asmlinkage long sys_rpcool_seal(long connection_fd,
 								unsigned long start, size_t len, int mode, unsigned long release_threshold);
-asmlinkage long sys_rpcool_release(const char __user * path, long connection_id, int index, const unsigned char __user * signiture);
+asmlinkage long sys_rpcool_release(int connection_fd, int index, const unsigned char __user * signiture);
 
 #endif
