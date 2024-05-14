@@ -126,7 +126,6 @@ struct connection_entry *find_connection_entry(const char __user *path,
 	return entry;
 }
 
-
 // ###############################
 // ###### System Calls ###########
 // ###############################
@@ -260,13 +259,13 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 	}
 
 	ida_init(&new_entry->seal_store->scope_id_allocator);
-	
+
 	fd = ida_alloc(&g_connections_fd_id_allocator, GFP_KERNEL);
 	if (fd < 0 || fd >= CONNECTION_DESCRIPTOR_LEN) {
 		printk("[rpcool] could not allocate fd\n");
 		if (fd >= CONNECTION_DESCRIPTOR_LEN)
 			printk("[rpcool] fd is too large\n");
-		fput(f_metadata);	
+		fput(f_metadata);
 		fput(f_private_heap);
 		kfree(new_entry->path);
 		kfree(new_entry->seal_store);
@@ -274,28 +273,28 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 		return -1;
 	}
 
-	new_entry->seal_store->vma_cache = vmalloc(MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
+	new_entry->seal_store->vma_cache =
+		vmalloc(MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
 	if (new_entry->seal_store->vma_cache) {
-		memset(new_entry->seal_store->vma_cache, 0, MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
+		memset(new_entry->seal_store->vma_cache, 0,
+		       MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
 	} else {
-		printk("[rpcool] could not allocate vma_cache\n");		
-		fput(f_metadata);	
+		printk("[rpcool] could not allocate vma_cache\n");
+		fput(f_metadata);
 		fput(f_private_heap);
 		kfree(new_entry->path);
 		kfree(new_entry->seal_store);
 		kfree(new_entry);
 		return -1;
-	}		
+	}
 	arch_atomic_set(&new_entry->seal_store->vma_cache_size, 0);
 
 	new_entry->connection_fd = fd;
 	g_connections_fd[fd] = new_entry;
-	
+
 	hash_value =
 		full_name_hash(NULL, new_entry->path, strlen(new_entry->path));
 	hash_add(g_connections, &new_entry->hnode, hash_value);
-
-	
 
 	return fd;
 }
@@ -392,91 +391,99 @@ SYSCALL_DEFINE0(rpcool_describe_channel)
 	return 0;
 }
 
-
-SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd,
-                unsigned long, start, size_t, len)
+SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
+		size_t, len)
 {
-    struct connection_entry *connection_entry;
-    struct vm_area_struct *new_vma;
-    int error, id;
+	struct connection_entry *connection_entry;
+	struct vm_area_struct *new_vma;
+	int error, id;
 
-    if (DEBUG_RPCOOL) {
-        printk("[rpcool] rpcool_create_scope called with connection fd=%d, start=%lx, len=%zu\n",
-               connection_fd, start, len);
-    }
+	if (DEBUG_RPCOOL) {
+		printk("[rpcool] rpcool_create_scope called with connection fd=%d, start=%lx, len=%zu\n",
+		       connection_fd, start, len);
+	}
 
-    if (connection_fd < 0) {
-        printk("[rpcool] assign: invalid connection_fd\n");
-        return -EINVAL;
-    }
+	if (connection_fd < 0) {
+		printk("[rpcool] assign: invalid connection_fd\n");
+		return -EINVAL;
+	}
 
-    connection_entry = g_connections_fd[connection_fd];
-    if (!connection_entry) {
-        return -ENODEV;
-    }
+	connection_entry = g_connections_fd[connection_fd];
+	if (!connection_entry) {
+		return -ENODEV;
+	}
 
-    struct SealStore *seal_store = connection_entry->seal_store;
+	struct SealStore *seal_store = connection_entry->seal_store;
 
-    // Generate an ID
-    id = ida_alloc(&seal_store->scope_id_allocator, GFP_KERNEL);
-    if (id < 0) {
-        pr_err("[rpcool] assign: could not allocate ID\n");
-        return id;
-    }
+	// Generate an ID
+	id = ida_alloc(&seal_store->scope_id_allocator, GFP_KERNEL);
+	if (id < 0) {
+		pr_err("[rpcool] assign: could not allocate ID\n");
+		return id;
+	}
 
-    new_vma = rpcool_change_protection(start, len, PROT_READ);
-    if (IS_ERR(new_vma)) {
-        pr_err("[rpcool] assign: could not change protection to read-only for addr=%lx, len=%zu\n", start, len);
-        ida_free(&seal_store->scope_id_allocator, id);
-        return PTR_ERR(new_vma);
-    }
+	new_vma = rpcool_change_protection(start, len, PROT_READ);
+	if (IS_ERR(new_vma)) {
+		pr_err("[rpcool] assign: could not change protection to read-only for addr=%lx, len=%zu\n",
+		       start, len);
+		ida_free(&seal_store->scope_id_allocator, id);
+		return PTR_ERR(new_vma);
+	}
 
 	if (new_vma->vm_start != start || new_vma->vm_end != start + len) {
-		pr_err("[rpcool] create_scope (R): the returned vma does not match the requested range. new_vma->vm_start=%lx, new_vma->vm_end=%lx, request_start=%lx, request_len=%zu, request_end=%lx\n", new_vma->vm_start, new_vma->vm_end, start, len, start+len);
+		pr_err("[rpcool] create_scope (R): the returned vma does not match the requested range. new_vma->vm_start=%lx, new_vma->vm_end=%lx, request_start=%lx, request_len=%zu, request_end=%lx\n",
+		       new_vma->vm_start, new_vma->vm_end, start, len,
+		       start + len);
 		return -1;
 	}
 
-    new_vma = rpcool_change_protection(start, len, PROT_READ | PROT_WRITE);
-    if (IS_ERR(new_vma)) {
-        pr_err("[rpcool] assign: could not change protection back to read-write for addr=%lx, len=%zu\n", start, len);
-        ida_free(&seal_store->scope_id_allocator, id);
-        return PTR_ERR(new_vma);
-    }
+	new_vma = rpcool_change_protection(start, len, PROT_READ | PROT_WRITE);
+	if (IS_ERR(new_vma)) {
+		pr_err("[rpcool] assign: could not change protection back to read-write for addr=%lx, len=%zu\n",
+		       start, len);
+		ida_free(&seal_store->scope_id_allocator, id);
+		return PTR_ERR(new_vma);
+	}
 
 	if (new_vma->vm_start != start || new_vma->vm_end != start + len) {
-		pr_err("[rpcool] create_scope (RW): the returned vma does not match the requested range. new_vma->vm_start=%lx, new_vma->vm_end=%lx, request_start=%lx, request_len=%zu, request_end=%lx\n", new_vma->vm_start, new_vma->vm_end, start, len, start+len);
+		pr_err("[rpcool] create_scope (RW): the returned vma does not match the requested range. new_vma->vm_start=%lx, new_vma->vm_end=%lx, request_start=%lx, request_len=%zu, request_end=%lx\n",
+		       new_vma->vm_start, new_vma->vm_end, start, len,
+		       start + len);
 		return -1;
 	}
 
-    seal_store->vma_cache[id] = new_vma;
-	atomic_max(&seal_store->vma_cache_size, id+1); // size is 1-based
+	seal_store->vma_cache[id] = new_vma;
+	atomic_max(&seal_store->vma_cache_size, id + 1); // size is 1-based
 
-	error = store_seal_at_index(connection_entry->seal_store, start, len, id);
+	error = store_seal_at_index(connection_entry->seal_store, start, len,
+				    id);
 
 	if (error < 0) {
-		printk("[rpcool] create_scope: could not store seal metadata (SealEntry), start=%lx, len=%zu\n", start, len);
+		printk("[rpcool] create_scope: could not store seal metadata (SealEntry), start=%lx, len=%zu\n",
+		       start, len);
 		return -1;
 	}
 
 	if (DEBUG_RPCOOL) {
-        printk("[rpcool] create_scope: scope created with id=%d, start=%lx, len=%zu\n", id, start, len);
-    }
+		printk("[rpcool] create_scope: scope created with id=%d, start=%lx, len=%zu\n",
+		       id, start, len);
+	}
 
-    return id;
+	return id;
 }
-
 
 /* @return 0 on success, -1 on failure
  * @note This will reset seal_counter to 1 (and not 0) because the caller will continue to seal after this release
 */
 
-int batch_release(struct connection_entry *connection_entry, unsigned long release_threshold)
+int batch_release(struct connection_entry *connection_entry,
+		  unsigned long release_threshold)
 {
 	struct shared_heap_entry *shared_heap_entry;
 	struct vm_area_struct *change_prot_result;
 	ktime_t release_start_time;
 	const int report_time_frequency =
-		(int) max(1000000UL / release_threshold / 25UL, 1UL);
+		(int)max(1000000UL / release_threshold / 25UL, 1UL);
 	static syscall_time_stats_t syscall_batch_release_stats = {
 		{ "rpcool_batch_release" }, 0, 0
 	};
@@ -490,7 +497,9 @@ int batch_release(struct connection_entry *connection_entry, unsigned long relea
 
 	if (DEBUG_RPCOOL) {
 		printk("[rpcool] batch_release called with release_threshold=%lu, vma_size=%d\n",
-		       release_threshold, arch_atomic_read(&connection_entry->seal_store->vma_cache_size));
+		       release_threshold,
+		       arch_atomic_read(
+			       &connection_entry->seal_store->vma_cache_size));
 	}
 	// pr_err("[rpcool] seal: max queue length reached\n");
 	// only one thread will call release_all
@@ -519,15 +528,16 @@ int batch_release(struct connection_entry *connection_entry, unsigned long relea
 	// unsigned long vma = shared_heap_entry->vma;
 	// unsigned long size = shared_heap_entry->size;
 	// pr_info("[rpcool] release_all called with vma=%lx, vma=%lu, size=%lu\n", vma, vma, size);
-	
-	change_prot_result = rpcool_change_protection_vma_all(connection_entry->seal_store->vma_cache,
-					arch_atomic_read(&connection_entry->seal_store->vma_cache_size),
-					PROT_READ | PROT_WRITE);
+
+	change_prot_result = rpcool_change_protection_vma_all(
+		connection_entry->seal_store->vma_cache,
+		arch_atomic_read(&connection_entry->seal_store->vma_cache_size),
+		PROT_READ | PROT_WRITE);
 	if (IS_ERR(change_prot_result)) {
 		pr_err("[rpcool] release_all: could not change protection using rpcool_change_protection_vma_all, error: %ld",
-			 PTR_ERR(change_prot_result));
+		       PTR_ERR(change_prot_result));
 		mutex_unlock(&connection_entry->seal_store
-					->seal_only_one_should_call_release_lock);
+				      ->seal_only_one_should_call_release_lock);
 		return PTR_ERR(change_prot_result);
 	}
 	reset_release_counter(connection_entry->seal_store);
@@ -542,7 +552,8 @@ int batch_release(struct connection_entry *connection_entry, unsigned long relea
 	return 0;
 }
 
-SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode, unsigned long, release_threshold)
+SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode,
+		unsigned long, release_threshold)
 {
 	struct connection_entry *connection_entry;
 	struct vm_area_struct *change_prot_result, *vma;
@@ -576,7 +587,8 @@ SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode, un
 		index = arch_atomic_fetch_inc(
 			&connection_entry->seal_store->seal_counter);
 		if (index >= release_threshold) {
-			result = batch_release(connection_entry, release_threshold);
+			result = batch_release(connection_entry,
+					       release_threshold);
 			if (result != 0)
 				return result;
 			index = 0; // batch_release will reset the counter to 1 and hence 0 will be ours to use
@@ -590,16 +602,17 @@ SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode, un
 	change_prot_result = rpcool_change_protection_vma(vma, PROT_READ);
 	if (IS_ERR(change_prot_result)) {
 		pr_err("[rpcool] seal: could not change protection for addr=%lx, len=%lu, error=%ld",
-			start, len, PTR_ERR(change_prot_result));
+		       start, len, PTR_ERR(change_prot_result));
 		return PTR_ERR(change_prot_result);
 	}
 
-	result = reset_seal_nonce_at_index(connection_entry->seal_store, scope_index);
+	result = reset_seal_nonce_at_index(connection_entry->seal_store,
+					   scope_index);
 	if (result < 0) {
 		printk("[rpcool] seal: could not store seal. reverting protection bits for addr=%lx, len=%lu",
 		       start, len);
-		change_prot_result = rpcool_change_protection_vma(vma,
-						 PROT_READ | PROT_WRITE);
+		change_prot_result = rpcool_change_protection_vma(
+			vma, PROT_READ | PROT_WRITE);
 		if (IS_ERR(change_prot_result)) {
 			pr_err("[rpcool] seal: could not change protection back for addr=%lu, len=%lu, error=%ld",
 			       start, len, PTR_ERR(change_prot_result));
@@ -611,8 +624,8 @@ SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode, un
 	return result;
 }
 
-SYSCALL_DEFINE3(rpcool_release, int, connection_fd,
-		int, index, const unsigned char __user *, signature)
+SYSCALL_DEFINE3(rpcool_release, int, connection_fd, int, index,
+		const unsigned char __user *, signature)
 {
 	struct connection_entry *connection_entry;
 	struct SealEntry *seal_entry;
@@ -630,7 +643,8 @@ SYSCALL_DEFINE3(rpcool_release, int, connection_fd,
 	// printk("[rpcool] rpcool_release called with index=%d\n", index);
 
 	if (DEBUG_RPCOOL) {
-		printk("[rpcool] rpcool_release called with connection_fd=%d, index=%d\n", connection_fd, index);
+		printk("[rpcool] rpcool_release called with connection_fd=%d, index=%d\n",
+		       connection_fd, index);
 	}
 
 	if (connection_fd < 0) {
@@ -662,7 +676,8 @@ SYSCALL_DEFINE3(rpcool_release, int, connection_fd,
 		return result;
 	}
 
-	change_prot_result = rpcool_change_protection(start, len, PROT_READ | PROT_WRITE);
+	change_prot_result =
+		rpcool_change_protection(start, len, PROT_READ | PROT_WRITE);
 	if (IS_ERR(change_prot_result)) {
 		pr_err("[rpcool] release: could not change protection for addr=%lx, len=%lu, error: %ld",
 		       start, len, PTR_ERR(change_prot_result));
@@ -723,7 +738,7 @@ SYSCALL_DEFINE2(rpcool_delete_connection, const char __user *, path, long,
 		return -1;
 	}
 
-	if(entry->connection_fd != -1) {
+	if (entry->connection_fd != -1) {
 		g_connections_fd[entry->connection_fd] = NULL;
 		ida_free(&g_connections_fd_id_allocator, entry->connection_fd);
 		entry->connection_fd = -1;

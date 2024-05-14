@@ -7,8 +7,8 @@ void log_vma_info(const char *str, struct vm_area_struct *vma)
 	       str, vma->vm_start, vma->vm_end, pgprot_val(vma->vm_page_prot));
 }
 
-struct vm_area_struct * rpcool_change_protection(unsigned long start, size_t len,
-			     unsigned long prot)
+struct vm_area_struct *rpcool_change_protection(unsigned long start, size_t len,
+						unsigned long prot)
 {
 	unsigned long nstart, end, tmp, reqprot;
 	int error;
@@ -35,7 +35,7 @@ struct vm_area_struct * rpcool_change_protection(unsigned long start, size_t len
 	}
 
 	if (!len)
-		return ERR_PTR(-EINVAL);;
+		return ERR_PTR(-EINVAL);
 
 	len = PAGE_ALIGN(len);
 	end = start + len;
@@ -120,7 +120,8 @@ flags\n"); error = -EACCES; break;
 			}
 		}
 
-		error = rpcool_mprotect_fixup(&tlb, vma, &prev, nstart, tmp, newflags);
+		error = rpcool_mprotect_fixup(&tlb, vma, &prev, nstart, tmp,
+					      newflags);
 		if (error) {
 			printk("[rpcool] mprotect_fixup failed\n");
 			break;
@@ -167,8 +168,8 @@ out:
 	return vma;
 }
 
-
-struct vm_area_struct * rpcool_change_protection_vma(struct vm_area_struct *vma, unsigned long prot)
+struct vm_area_struct *rpcool_change_protection_vma(struct vm_area_struct *vma,
+						    unsigned long prot)
 {
 	unsigned long reqprot;
 	int error = 0;
@@ -218,15 +219,16 @@ struct vm_area_struct * rpcool_change_protection_vma(struct vm_area_struct *vma,
 
 		if (vma->vm_ops && vma->vm_ops->mprotect) {
 			printk("[rpcool] rpcool_change_protection_vma: calling vma->vm_ops->mprotect\n");
-			error = vma->vm_ops->mprotect(vma, vma->vm_start, vma->vm_end,
-						      newflags);
+			error = vma->vm_ops->mprotect(vma, vma->vm_start,
+						      vma->vm_end, newflags);
 			if (error) {
 				printk("[rpcool] vma->vm_ops->mprotect failed\n");
 				goto out;
 			}
 		}
 
-		error = rpcool_mprotect_fixup(&tlb, vma, &prev, vma->vm_start, vma->vm_end, newflags);
+		error = rpcool_mprotect_fixup(&tlb, vma, &prev, vma->vm_start,
+					      vma->vm_end, newflags);
 		if (error) {
 			printk("[rpcool] mprotect_fixup failed\n");
 			goto out;
@@ -243,8 +245,9 @@ out:
 	return vma;
 }
 
-
-struct vm_area_struct * rpcool_change_protection_vma_all(struct vm_area_struct **vma_array, size_t vma_array_size, unsigned long prot)
+struct vm_area_struct *
+rpcool_change_protection_vma_all(struct vm_area_struct **vma_array,
+				 size_t vma_array_size, unsigned long prot)
 {
 	unsigned long reqprot;
 	int error = 0;
@@ -272,43 +275,49 @@ struct vm_area_struct * rpcool_change_protection_vma_all(struct vm_area_struct *
 		return ERR_PTR(-EINTR);
 	}
 
-
 	tlb_gather_mmu(&tlb, current->mm);
 	{
-		for(size_t i = 0; i < vma_array_size; i++) {
+		for (size_t i = 0; i < vma_array_size; i++) {
 			unsigned long mask_off_old_flags;
 			unsigned long newflags;
 
 			mask_off_old_flags = VM_READ | VM_WRITE | VM_EXEC |
-						VM_FLAGS_CLEAR;
+					     VM_FLAGS_CLEAR;
 
 			vma = vma_array[i];
 			prev = vma;
 			if (vma == NULL)
 				continue;
-			
+
 			newflags = calc_vm_prot_bits(prot, 0);
 			newflags |= (vma->vm_flags & ~mask_off_old_flags);
 
 			/* Allow architectures to sanity-check the new flags */
 			if (!arch_validate_flags(newflags)) {
-				printk("[rpcool] new protection flags were not allowed by arch on vma with scope_id=%zu, start=%lx, end=%lx\n", i, vma->vm_start, vma->vm_end);
+				printk("[rpcool] new protection flags were not allowed by arch on vma with scope_id=%zu, start=%lx, end=%lx\n",
+				       i, vma->vm_start, vma->vm_end);
 				error = -EINVAL;
 				goto out;
 			}
 
 			if (vma->vm_ops && vma->vm_ops->mprotect) {
-				error = vma->vm_ops->mprotect(vma, vma->vm_start, vma->vm_end,
-								newflags);
+				error = vma->vm_ops->mprotect(vma,
+							      vma->vm_start,
+							      vma->vm_end,
+							      newflags);
 				if (error) {
-					printk("[rpcool] vma->vm_ops->mprotect failedon vma with scope_id=%zu, start=%lx, end=%lx\n", i, vma->vm_start, vma->vm_end);
+					printk("[rpcool] vma->vm_ops->mprotect failedon vma with scope_id=%zu, start=%lx, end=%lx\n",
+					       i, vma->vm_start, vma->vm_end);
 					goto out;
 				}
 			}
 
-			error = rpcool_mprotect_fixup(&tlb, vma, &prev, vma->vm_start, vma->vm_end, newflags);
+			error = rpcool_mprotect_fixup(&tlb, vma, &prev,
+						      vma->vm_start,
+						      vma->vm_end, newflags);
 			if (error) {
-				printk("[rpcool] mprotect_fixup failed on vma with scope_id=%zu, start=%lx, end=%lx\n", i, vma->vm_start, vma->vm_end);
+				printk("[rpcool] mprotect_fixup failed on vma with scope_id=%zu, start=%lx, end=%lx\n",
+				       i, vma->vm_start, vma->vm_end);
 				goto out;
 			}
 		}
