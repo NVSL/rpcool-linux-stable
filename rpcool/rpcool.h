@@ -92,5 +92,6 @@ struct connection_entry {
 #define SEAL_BATCH_RELEASE 1
 
 #define CONNECTION_DESCRIPTOR_LEN 4096
+#define MAX_SCOPE_COUNT 4194304 // 2^22
 
 #endif  //_RPCOOL_KERNEL_H

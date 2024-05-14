@@ -13,7 +13,16 @@
 #include <linux/hugetlb.h>
 #include <linux/security.h>
 
-int rpcool_change_protection(unsigned long start, size_t len,
-			     unsigned long prot);
+struct vm_area_struct *rpcool_change_protection(unsigned long start, size_t len,
+						unsigned long prot);
+
+struct vm_area_struct *rpcool_change_protection_vma(struct vm_area_struct *vma,
+						    unsigned long prot);
+
+struct vm_area_struct *
+rpcool_change_protection_vma_all(struct vm_area_struct **vma_array,
+				 size_t vma_array_size, unsigned long prot);
+
+void log_vma_info(const char *str, struct vm_area_struct *vma);
 
 #endif // _RPCOOL_MPROTECT_H
