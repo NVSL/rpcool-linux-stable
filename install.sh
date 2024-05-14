@@ -4,7 +4,7 @@
 set -eux
 
 sudo make -j$(nproc)
-sudo make modules_install -j$(nproc) > /tmp/kernel_modules_install.log
+sudo make modules_install -j$(nproc) > /tmp/kernel_modules_install.log 2>&1
 # sudo make headers_install ARCH=x86
 sudo make install -j$(nproc)
 
