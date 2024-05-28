@@ -144,25 +144,6 @@ int reset_release_counter(struct SealStore *seal_store)
 	return 0;
 }
 
-int release_seal(struct SealStore *seal_store, ssize_t index)
-{
-	loff_t pos;
-	ssize_t result;
-	static struct SealEntry entry = { 0 };
-
-	// pr_info("[rpcool] releasing seal at index = %zd\n", index);
-	pos = ENTRIES_START_POS + index * sizeof(struct SealEntry);
-	result = kernel_write(seal_store->f_metadata, &entry,
-			      sizeof(struct SealEntry), &pos);
-	if (result < 0) {
-		pr_err("[rpcool] release: Error zeroing out the entry in the seal store: %zd\n",
-		       result);
-		return result;
-	}
-
-	return 0;
-}
-
 int atomic_max(atomic_t *v, int max)
 {
 	int old, curr;

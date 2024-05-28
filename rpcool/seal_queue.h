@@ -33,7 +33,6 @@ int reset_seal_nonce_at_index(struct SealStore *seal_store, int index);
 // caller has to free the returned pointer
 struct SealEntry *get_seal(struct SealStore *seal_store, ssize_t index);
 uint64_t get_current_nonce(struct SealStore *seal_store, ssize_t index);
-int release_seal(struct SealStore *seal_store, ssize_t index);
 struct SealStore *initialize_seal_store(struct file *f_metadata);
 //returns value of release counter. 0 otherwise
 uint64_t read_release_counter(struct SealStore *seal_store);

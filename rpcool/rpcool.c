@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/ktime.h>
 #include <linux/sched.h>
+#include <linux/pid_namespace.h>
 
 static unsigned long vm_flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_SHARED |
 				VM_MAYSHARE;
@@ -399,12 +400,12 @@ SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
 	int error, id;
 
 	if (DEBUG_RPCOOL) {
-		printk("[rpcool] rpcool_create_scope called with connection fd=%d, start=%lx, len=%zu\n",
+		printk("[rpcool] create_scope called with connection fd=%d, start=%lx, len=%zu\n",
 		       connection_fd, start, len);
 	}
 
 	if (connection_fd < 0) {
-		printk("[rpcool] assign: invalid connection_fd\n");
+		printk("[rpcool] create_scope: invalid connection_fd\n");
 		return -EINVAL;
 	}
 
@@ -418,13 +419,13 @@ SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
 	// Generate an ID
 	id = ida_alloc(&seal_store->scope_id_allocator, GFP_KERNEL);
 	if (id < 0) {
-		pr_err("[rpcool] assign: could not allocate ID\n");
+		pr_err("[rpcool] create_scope: could not allocate ID\n");
 		return id;
 	}
 
 	new_vma = rpcool_change_protection(start, len, PROT_READ);
 	if (IS_ERR(new_vma)) {
-		pr_err("[rpcool] assign: could not change protection to read-only for addr=%lx, len=%zu\n",
+		pr_err("[rpcool] create_scope: could not change protection to read-only for addr=%lx, len=%zu\n",
 		       start, len);
 		ida_free(&seal_store->scope_id_allocator, id);
 		return PTR_ERR(new_vma);
@@ -439,7 +440,7 @@ SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
 
 	new_vma = rpcool_change_protection(start, len, PROT_READ | PROT_WRITE);
 	if (IS_ERR(new_vma)) {
-		pr_err("[rpcool] assign: could not change protection back to read-write for addr=%lx, len=%zu\n",
+		pr_err("[rpcool] create_scope: could not change protection back to read-write for addr=%lx, len=%zu\n",
 		       start, len);
 		ida_free(&seal_store->scope_id_allocator, id);
 		return PTR_ERR(new_vma);
@@ -501,6 +502,14 @@ int batch_release(struct connection_entry *connection_entry,
 		       arch_atomic_read(
 			       &connection_entry->seal_store->vma_cache_size));
 	}
+
+	// unsigned long start_0 = connection_entry->seal_store->vma_cache[0]->vm_start;
+	// int vma_array_size =  arch_atomic_read(&connection_entry->seal_store->vma_cache_size);
+	// printk("[rpcool] we cool.");
+	// unsigned long start_n = connection_entry->seal_store->vma_cache[vma_array_size-1]->vm_start;
+	// printk("[rpcool] batch_release called with release_threshold=%lu, vma_size=%d, vma[0].start=%lx, vma[n].start=%lx\n",
+	// 	       release_threshold, vma_array_size, start_0, start_n);
+
 	// pr_err("[rpcool] seal: max queue length reached\n");
 	// only one thread will call release_all
 	uint64_t release_counter =
@@ -508,9 +517,9 @@ int batch_release(struct connection_entry *connection_entry,
 	// int retry_count = 0;
 	while (release_counter < release_threshold) {
 		// if (retry_count % 5000 == 0)
-		// 	pr_info("[rpcool] release counter is %lu. waiting for it to reach %lu\n", release_counter, release_threshold);
+		// 	pr_info("[rpcool] release counter is %lu. waiting for it to reach %lu, caller_pid=%d\n", release_counter, release_threshold,task_tgid_nr_ns(current, &init_pid_ns));
 		// retry_count++;
-		// schedule();
+		schedule();
 		release_counter =
 			read_release_counter(connection_entry->seal_store);
 	}
@@ -687,12 +696,6 @@ SYSCALL_DEFINE3(rpcool_release, int, connection_fd, int, index,
 
 	// printk("[rpcool] release: remmapped the memory region at index=%d\n", index);
 
-	result = release_seal(connection_entry->seal_store, index);
-	if (result < 0) {
-		printk("[rpcool] release: could not update the seal_store. But remapped the memory region at index=%d\n",
-		       index);
-		return result;
-	}
 	// kfree(seal_entry);
 	end_time_measure(start_time, &syscall_stats, 40000);
 	return result;
