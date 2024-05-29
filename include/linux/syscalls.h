@@ -1402,7 +1402,7 @@ asmlinkage long sys_rpcool_describe_channel(void);
 
 asmlinkage long sys_rpcool_create_scope(int connection_fd, unsigned long start, size_t len);
 
-asmlinkage long sys_rpcool_seal(long connection_fd,int index, int mode, unsigned long release_threshold);
+asmlinkage long sys_rpcool_seal(long connection_fd,int index, int mode, unsigned long release_threshold, unsigned long expected_start);
 
 asmlinkage long sys_rpcool_release(int connection_fd, int index, const unsigned char __user * signiture);
 

@@ -852,3 +852,16 @@ unsigned long rpcool_do_mmap(struct task_struct* target_process, struct file *fi
 		*populate = len;
 	return addr;
 }
+
+int is_address_mapped(struct task_struct *task, unsigned long address) {
+    char buf;
+    int ret;
+
+    // Try to read one byte from the given address in the process's address space
+    ret = access_process_vm(task, address, &buf, sizeof(buf), FOLL_FORCE);
+    
+    // If ret is not 1, then the address is not mapped
+    if (ret != 1)
+        return 0; // Address is not mapped
+    return 1; // Address is mapped
+}

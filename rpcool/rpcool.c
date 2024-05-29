@@ -319,10 +319,10 @@ SYSCALL_DEFINE6(rpcool_attach_connection, const char __user *, path, long,
 
 	target_process = find_task_by_vpid(target_pid);
 	if (target_process == NULL) {
-		printk("[rpcool] could not find the task_struct for the pid\n");
+		printk("[rpcool] rpcool_attach_connection could not find the task_struct for the pid\n");
 		return -1;
 	} else {
-		printk("[rpcool] found process for pid %d", target_pid);
+		printk("[rpcool] rpcool_attach_connection found process for pid %d", target_pid);
 	}
 
 	connection_entry = find_connection_entry(path, connection_id);
@@ -337,10 +337,16 @@ SYSCALL_DEFINE6(rpcool_attach_connection, const char __user *, path, long,
 	}
 	shared_heap_entry->vma = shared_heap_vma;
 
-	if (rpcool_map_file(target_process, shared_heap_entry->shared_heap,
+	if (is_address_mapped(target_process, shared_heap_vma) == 1) {
+		printk("[rpcool] rpcool_attach_connection shared heap is already mapped to pid=%d. skipping the remapping ...\n", target_pid);
+	} else {
+		
+		printk("[rpcool] rpcool_attach_connection mapping the shared heap to pid=%d\n", target_pid);
+		if (rpcool_map_file(target_process, shared_heap_entry->shared_heap,
 			    read_file_size(shared_heap_entry->shared_heap),
 			    shared_heap_vma) != 0) {
-		return -1;
+			return -1;
+		}
 	}
 
 	if (rpcool_map_file(target_process, connection_entry->private_heap,
@@ -414,6 +420,11 @@ SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
 		return -ENODEV;
 	}
 
+	if (start > 0x700000000000 || start < 0x600000000000) {
+		pr_err("[rpcool] create_scope: start address is out of range for rpcool shm. start=%lx\n", start);
+		return -EINVAL;
+	}
+
 	struct SealStore *seal_store = connection_entry->seal_store;
 
 	// Generate an ID
@@ -466,10 +477,9 @@ SYSCALL_DEFINE3(rpcool_create_scope, int, connection_fd, unsigned long, start,
 	}
 
 	if (DEBUG_RPCOOL) {
-		printk("[rpcool] create_scope: scope created with id=%d, start=%lx, len=%zu\n",
-		       id, start, len);
+	printk("[rpcool] create_scope: scope created with fd=%d, id=%d, start=%lx, end=%lx, vma_itself=%lx, vma_cache=%lx\n",
+		connection_fd, id, seal_store->vma_cache[id]->vm_start, seal_store->vma_cache[id]->vm_end, seal_store->vma_cache[id], seal_store->vma_cache);
 	}
-
 	return id;
 }
 
@@ -561,8 +571,8 @@ int batch_release(struct connection_entry *connection_entry,
 	return 0;
 }
 
-SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode,
-		unsigned long, release_threshold)
+SYSCALL_DEFINE5(rpcool_seal, int, connection_fd, int, scope_index, int, mode,
+		unsigned long, release_threshold, unsigned long, expected_start)
 {
 	struct connection_entry *connection_entry;
 	struct vm_area_struct *change_prot_result, *vma;
@@ -600,7 +610,7 @@ SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode,
 					       release_threshold);
 			if (result != 0)
 				return result;
-			index = 0; // batch_release will reset the counter to 1 and hence 0 will be ours to use
+			// index = 0; // batch_release will reset the counter to 1 and hence 0 will be ours to use
 			//start_time = start_time_measure(); // reset the start_timer for seal so that we will not include the release time in the seal time
 		} // continue with the seal
 	}
@@ -608,6 +618,13 @@ SYSCALL_DEFINE4(rpcool_seal, int, connection_fd, int, scope_index, int, mode,
 	vma = connection_entry->seal_store->vma_cache[scope_index];
 	start = vma->vm_start;
 	len = vma->vm_end - vma->vm_start;
+
+	if (start != expected_start) {
+		pr_err("[rpcool] seal: start address does not match the expected start address. fd=%d, scope_index=%d, start=%lx, expected_start=%lx",
+		       connection_fd, scope_index, start, expected_start);
+		return -1;
+	}
+	
 	change_prot_result = rpcool_change_protection_vma(vma, PROT_READ);
 	if (IS_ERR(change_prot_result)) {
 		pr_err("[rpcool] seal: could not change protection for addr=%lx, len=%lu, error=%ld",

@@ -55,6 +55,8 @@ unsigned long rpcool_do_mmap(struct task_struct *target_process,
 			     unsigned long flags, unsigned long pgoff,
 			     unsigned long *populate, struct list_head *uf);
 
+int is_address_mapped(struct task_struct *task, unsigned long address);
+
 size_t read_file_size(struct file *file);
 
 long copy_string_from_user(char *kernel_buffer, size_t buffer_size,
