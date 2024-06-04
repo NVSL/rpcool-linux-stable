@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <linux/atomic.h>
 
+#define MAX_SCOPE_COUNT 4194304 // 2^22
 struct SealEntry {
 	size_t addr;
 	size_t len;
@@ -34,6 +35,7 @@ int reset_seal_nonce_at_index(struct SealStore *seal_store, int index);
 struct SealEntry *get_seal(struct SealStore *seal_store, ssize_t index);
 uint64_t get_current_nonce(struct SealStore *seal_store, ssize_t index);
 struct SealStore *initialize_seal_store(struct file *f_metadata);
+void free_seal_store(struct SealStore *seal_store);
 //returns value of release counter. 0 otherwise
 uint64_t read_release_counter(struct SealStore *seal_store);
 //returns 0 on success and -1 on failure

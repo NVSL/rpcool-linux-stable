@@ -131,6 +131,66 @@ struct connection_entry *find_connection_entry(const char __user *path,
 // ###### System Calls ###########
 // ###############################
 
+void free_connection_entry(struct connection_entry *entry)
+{
+	printk("[rpcool] clearing connection entry with path %s, shared_path: %s, id: %ld, fd: %d\n", entry->path, entry->shared_heap_entry->path, entry->connection_id, entry->connection_fd);
+    if (entry->connection_fd != -1) {
+        g_connections_fd[entry->connection_fd] = NULL;
+        // ida_free(g_connections_fd_id_allocator, entry->connection_fd);
+        entry->connection_fd = -1;
+    }
+
+    fput(entry->metadata);
+    fput(entry->private_heap);
+
+    free_seal_store(entry->seal_store);
+    kfree(entry->path);
+    hash_del(&entry->hnode);
+    kfree(entry);
+}
+
+
+void free_all_connections(void)
+{
+    struct connection_entry *entry;
+    struct hlist_node *tmp;
+    int bkt;
+
+    hash_for_each_safe(g_connections, bkt, tmp, entry, hnode) {
+        free_connection_entry(entry);
+    }
+}
+
+void free_shared_heap_entry(struct shared_heap_entry *entry)
+{
+	printk("[rpcool] clearing shared heap entry with path %s : %s\n", entry->dev_prefix_path, entry->path);
+    fput(entry->shared_heap);
+
+    kfree(entry->dev_prefix_path);
+    kfree(entry->path);
+    hash_del(&entry->hnode);
+    kfree(entry);
+}
+
+void free_all_shared_heap_entries(void)
+{
+    struct shared_heap_entry *entry;
+    struct hlist_node *tmp;
+    int bkt;
+
+    hash_for_each_safe(g_shared_heaps, bkt, tmp, entry, hnode) {
+        free_shared_heap_entry(entry);
+    }
+}
+
+
+SYSCALL_DEFINE0(rpcool_clean_up) {
+
+	free_all_connections();
+	free_all_shared_heap_entries();
+	return 0;
+}
+
 // Path examples:
 // dev_prefix: /mnt/cxl
 // path: kvstore
@@ -259,8 +319,6 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 		return PTR_ERR(new_entry->seal_store);
 	}
 
-	ida_init(&new_entry->seal_store->scope_id_allocator);
-
 	fd = ida_alloc(&g_connections_fd_id_allocator, GFP_KERNEL);
 	if (fd < 0 || fd >= CONNECTION_DESCRIPTOR_LEN) {
 		printk("[rpcool] could not allocate fd\n");
@@ -273,22 +331,6 @@ SYSCALL_DEFINE4(rpcool_setup_connection, const char __user *, path, long,
 		kfree(new_entry);
 		return -1;
 	}
-
-	new_entry->seal_store->vma_cache =
-		vmalloc(MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
-	if (new_entry->seal_store->vma_cache) {
-		memset(new_entry->seal_store->vma_cache, 0,
-		       MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
-	} else {
-		printk("[rpcool] could not allocate vma_cache\n");
-		fput(f_metadata);
-		fput(f_private_heap);
-		kfree(new_entry->path);
-		kfree(new_entry->seal_store);
-		kfree(new_entry);
-		return -1;
-	}
-	arch_atomic_set(&new_entry->seal_store->vma_cache_size, 0);
 
 	new_entry->connection_fd = fd;
 	g_connections_fd[fd] = new_entry;
@@ -768,7 +810,7 @@ SYSCALL_DEFINE2(rpcool_delete_connection, const char __user *, path, long,
 	fput(entry->private_heap);
 
 	hash_del(&entry->hnode);
-	kfree(entry->seal_store); //this is enough since the kfifo is allocated in the seal store and not as a pointer
+	free_seal_store(entry->seal_store);
 	kfree(entry->path);
 	kfree(entry);
 	return 0;

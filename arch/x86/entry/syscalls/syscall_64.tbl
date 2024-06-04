@@ -384,6 +384,8 @@
 458	common	rpcool_release		        sys_rpcool_release
 459	common	rpcool_describe_channel	    sys_rpcool_describe_channel
 460	common	rpcool_create_scope	        sys_rpcool_create_scope
+461	common	rpcool_clean_up             sys_rpcool_clean_up
+
 
 #
 # Due to a historical design error, certain syscalls are numbered differently

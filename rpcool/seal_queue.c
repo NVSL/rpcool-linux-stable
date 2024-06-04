@@ -93,6 +93,15 @@ struct SealStore *initialize_seal_store(struct file *f_metadata)
 		return ERR_PTR(-1);
 	}
 
+	seal_store->vma_cache = vzalloc(MAX_SCOPE_COUNT * sizeof(struct vm_area_struct *));
+	if (!seal_store->vma_cache) {
+		kfree(seal_store);
+		pr_err("[rpcool] Error allocating memory for vma cache\n");
+		return ERR_PTR(-ENOMEM);
+	}
+	arch_atomic_set(&seal_store->vma_cache_size, 0);
+	ida_init(&(seal_store->scope_id_allocator));
+
 	return seal_store;
 }
 
@@ -152,4 +161,19 @@ int atomic_max(atomic_t *v, int max)
 		old = curr;
 	}
 	return curr;
+}
+
+void free_seal_store(struct SealStore *seal_store)
+{
+    if (seal_store) {
+		// printk("[rpcool] free_seal_store: freeing vma_cache\n");
+        if (seal_store->vma_cache) {
+            vfree(seal_store->vma_cache);
+        }
+		// printk("[rpcool] free_seal_store: freeing scope_id_allocator\n");
+        ida_destroy(&seal_store->scope_id_allocator);
+		// printk("[rpcool] free_seal_store: freeing seal_store\n");
+        kfree(seal_store);
+		// printk("[rpcool] free_seal_store: done\n");
+    }
 }

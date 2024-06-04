@@ -89,6 +89,16 @@ struct connection_entry {
 	struct hlist_node hnode;
 };
 
+// void free_all_shared_heap_entries(struct hlist_head *g_shared_heaps);
+// void free_all_connections(struct connection_entry **g_connections_fd, struct ida *g_connections_fd_id_allocator, struct hlist_head *g_connections);
+
+void free_all_shared_heap_entries(void);
+void free_all_connections(void);
+void free_seal_store(struct SealStore *seal_store);
+void free_connection_entry(struct connection_entry *entry);
+void free_shared_heap_entry(struct shared_heap_entry *entry);
+
+
 #define SHARED_HEAP_TABLE_BITS 10 // A table of 2^10 entries
 #define CONNECTION_TABLE_BITS 10 // A table of 2^10 entries
 
@@ -98,6 +108,5 @@ struct connection_entry {
 #define SEAL_BATCH_RELEASE 1
 
 #define CONNECTION_DESCRIPTOR_LEN 4096
-#define MAX_SCOPE_COUNT 4194304 // 2^22
 
 #endif //_RPCOOL_KERNEL_H

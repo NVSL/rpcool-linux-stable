@@ -1406,4 +1406,7 @@ asmlinkage long sys_rpcool_seal(long connection_fd,int index, int mode, unsigned
 
 asmlinkage long sys_rpcool_release(int connection_fd, int index, const unsigned char __user * signiture);
 
+asmlinkage long sys_rpcool_clean_up(void);
+
+
 #endif
