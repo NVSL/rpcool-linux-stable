@@ -2038,6 +2038,10 @@ static inline bool page_is_pfmemalloc(const struct page *page)
 	return (uintptr_t)page->lru.next & BIT(1);
 }
 
+extern int rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
+			  struct vm_area_struct **pprev, unsigned long start,
+			  unsigned long end, unsigned long newflags);
+
 /*
  * Return true only if the folio has been allocated with
  * ALLOC_NO_WATERMARKS and the low watermark was not
