@@ -697,15 +697,15 @@ fail:
 }
 
 int
-rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
-	       struct vm_area_struct **pprev, unsigned long start,
-	       unsigned long end, unsigned long newflags)
+rpcool_mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
+		   struct vm_area_struct *vma, struct vm_area_struct **pprev,
+		   unsigned long start, unsigned long end, unsigned long newflags)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long oldflags = vma->vm_flags;
 	long nrpages = (end - start) >> PAGE_SHIFT;
+	unsigned int mm_cp_flags = 0;
 	unsigned long charged = 0;
-	bool try_change_writable;
 	pgoff_t pgoff;
 	int error;
 
@@ -720,14 +720,16 @@ rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	 * uncommon case, so doesn't need to be very optimized.
 	 */
 	if (arch_has_pfn_modify_check() &&
-	    (vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)) &&
-	    (newflags & VM_ACCESS_FLAGS) == 0) {
+		(vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)) &&
+		(newflags & VM_ACCESS_FLAGS) == 0) {
 		pgprot_t new_pgprot = vm_get_page_prot(newflags);
 
 		error = walk_page_range(current->mm, start, end,
 				&prot_none_walk_ops, &new_pgprot);
-		if (error)
+		if (error) {
+			printk(KERN_INFO "[rpcool]: PROT_NONE PFN permission check failed, returning error\n");
 			return error;
+		}
 	}
 
 	/*
@@ -739,13 +741,17 @@ rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	if (newflags & VM_WRITE) {
 		/* Check space limits when area turns into data. */
 		if (!may_expand_vm(mm, newflags, nrpages) &&
-				may_expand_vm(mm, oldflags, nrpages))
+				may_expand_vm(mm, oldflags, nrpages)) {
+			printk(KERN_INFO "[rpcool]: Space limits exceeded, returning -ENOMEM\n");
 			return -ENOMEM;
+		}
 		if (!(oldflags & (VM_ACCOUNT|VM_WRITE|VM_HUGETLB|
 						VM_SHARED|VM_NORESERVE))) {
 			charged = nrpages;
-			if (security_vm_enough_memory_mm(mm, charged))
+			if (security_vm_enough_memory_mm(mm, charged)) {
+				printk(KERN_INFO "[rpcool]: Not enough memory, returning -ENOMEM\n");
 				return -ENOMEM;
+			}
 			newflags |= VM_ACCOUNT;
 		}
 	}
@@ -754,7 +760,7 @@ rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	 * First try to merge with previous and/or next vma.
 	 */
 	/*pgoff = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
-	*pprev = vma_merge(mm, *pprev, start, end, newflags,
+	*pprev = vma_merge(vmi, mm, *pprev, start, end, newflags,
 			   vma->anon_vma, vma->vm_file, pgoff, vma_policy(vma),
 			   vma->vm_userfaultfd_ctx, anon_vma_name(vma));
 	if (*pprev) {
@@ -766,15 +772,19 @@ rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	*pprev = vma;
 
 	if (start != vma->vm_start) {
-		error = split_vma(mm, vma, start, 1);
-		if (error)
+		error = split_vma(vmi, vma, start, 1);
+		if (error) {
+			printk(KERN_INFO "[rpcool]: Failed to split VMA at start, returning error\n");
 			goto fail;
+		}
 	}
 
 	if (end != vma->vm_end) {
-		error = split_vma(mm, vma, end, 0);
-		if (error)
+		error = split_vma(vmi, vma, end, 0);
+		if (error) {
+			printk(KERN_INFO "[rpcool]: Failed to split VMA at end, returning error\n");
 			goto fail;
+		}
 	}
 
 success:
@@ -782,21 +792,12 @@ success:
 	 * vm_flags and vm_page_prot are protected by the mmap_lock
 	 * held in write mode.
 	 */
-	vma->vm_flags = newflags;
-	/*
-	 * We want to check manually if we can change individual PTEs writable
-	 * if we can't do that automatically for all PTEs in a mapping. For
-	 * private mappings, that's always the case when we have write
-	 * permissions as we properly have to handle COW.
-	 */
-	if (vma->vm_flags & VM_SHARED)
-		try_change_writable = vma_wants_writenotify(vma, vma->vm_page_prot);
-	else
-		try_change_writable = !!(vma->vm_flags & VM_WRITE);
+	vm_flags_reset(vma, newflags);
+	if (vma_wants_manual_pte_write_upgrade(vma))
+		mm_cp_flags |= MM_CP_TRY_CHANGE_WRITABLE;
 	vma_set_page_prot(vma);
 
-	change_protection(tlb, vma, start, end, vma->vm_page_prot,
-			  try_change_writable ? MM_CP_TRY_CHANGE_WRITABLE : 0);
+	change_protection(tlb, vma, start, end, mm_cp_flags);
 
 	/*
 	 * Private VM_LOCKED VMA becoming writable: trigger COW to avoid major
@@ -813,6 +814,7 @@ success:
 	return 0;
 
 fail:
+	printk(KERN_INFO "[rpcool]: Exiting rpcool_mprotect_fixup with failure\n");
 	vm_unacct_memory(charged);
 	return error;
 }

@@ -9,6 +9,6 @@ sudo make modules_install -j$(nproc) > /tmp/kernel_modules_install.log 2>&1
 sudo make install -j$(nproc)
 
 if [ "$1" == "boot" ]; then
-    sudo kexec -l /boot/vmlinuz-6.1.37+ --initrd=/boot/initrd.img-6.1.37+ --reuse-cmdline
+    sudo kexec -l /boot/vmlinuz-6.3.13+ --initrd=/boot/initrd.img-6.3.13+ --reuse-cmdline
     sudo kexec -f -e
 fi

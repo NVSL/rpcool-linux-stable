@@ -2038,9 +2038,11 @@ static inline bool page_is_pfmemalloc(const struct page *page)
 	return (uintptr_t)page->lru.next & BIT(1);
 }
 
-extern int rpcool_mprotect_fixup(struct mmu_gather *tlb, struct vm_area_struct *vma,
-			  struct vm_area_struct **pprev, unsigned long start,
-			  unsigned long end, unsigned long newflags);
+//This method will not merge the vma with the next/prev vma
+extern int rpcool_mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
+	  struct vm_area_struct *vma, struct vm_area_struct **pprev,
+	  unsigned long start, unsigned long end, unsigned long newflags);
+
 
 /*
  * Return true only if the folio has been allocated with
