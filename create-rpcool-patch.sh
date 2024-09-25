@@ -2,7 +2,7 @@
 set -eu
 
 # Define the main branch you're comparing against, usually master or main
-MAIN_BRANCH="v6.1.37"
+MAIN_BRANCH="v6.3.13"
 
 # Log the main branch name
 echo "Main branch: $MAIN_BRANCH"
